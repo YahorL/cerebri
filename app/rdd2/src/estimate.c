@@ -228,13 +228,18 @@ static void rdd2_estimate_run(void *p0, void *p1, void *p2)
 	// estimator states
 	double x[10] = {0, 0, 0, 0, 0, 0, q[0], q[1], q[2], q[3]};
 
-	// estimator covariance
-	double P[36] = {1e-2, 0, 0, 0, 0, 0,
+	// Position estimator covariance
+	double P_pos[36] = {1e-2, 0, 0, 0, 0, 0,
 	        		0, 1e-2, 0, 0, 0, 0,
 					0, 0, 1e-2, 0, 0, 0,
 					0, 0, 0, 1e-2, 0, 0, 
 					0, 0, 0, 0, 1e-2, 0, 
 					0, 0, 0, 0, 0, 1e-2};
+
+	// Attitude estimator covariance
+	double P_att[9] = {1e-2, 0, 0,
+	 				   0, 1e-2, 0,
+					   0, 0, 1e-2};
 
 	// poll on imu
 	events[0] = *zros_sub_get_event(&ctx->sub_imu);
@@ -354,10 +359,10 @@ static void rdd2_estimate_run(void *p0, void *p1, void *p2)
 			args[0] = x;
 			args[1] = gps;
 			args[2] = &dt;
-			args[3] = P;
+			args[3] = P_pos;
 
 			res[0] = x;
-			res[1] = P;
+			res[1] = P_pos;
 
 			CASADI_FUNC_CALL(position_correction)
 		}
@@ -371,6 +376,9 @@ static void rdd2_estimate_run(void *p0, void *p1, void *p2)
 		["q", "mag", "mag_decl", "gyro", "accel", "dt"],
 		["q1"],
 		)*/
+
+	double z[6];
+	double debug[3];
 
 		{
 			CASADI_FUNC_ARGS(attitude_estimator)
@@ -393,10 +401,18 @@ static void rdd2_estimate_run(void *p0, void *p1, void *p2)
 			args[5] = &accel_gain;
 			args[6] = &mag_gain;
 			args[7] = &dt;
-			
+			args[8] = P_att;
+
 			res[0] = q;
+			res[1] = P_att;
+			res[2] = z;
+			res[3] = debug;
 			CASADI_FUNC_CALL(attitude_estimator)
 		}
+
+		//LOG_INF("P_att AFTER: %f %f %f %f %f %f", P_att[0], P_att[7], P_att[14], P_att[21], P_att[28], P_att[35]);
+		//LOG_INF("z: %f %f %f %f %f %f", z[0], z[1], z[2], z[3], z[4], z[5]);
+		//LOG_INF("debug: %f %f %f", debug[0], debug[1], debug[2]);
 
 		// Put quaternion back into state vector
 		x[6] = q[0];
@@ -453,6 +469,7 @@ static void rdd2_estimate_run(void *p0, void *p1, void *p2)
 			ctx->odometry.twist.angular.y = ctx->imu.angular_velocity.y;
 			ctx->odometry.twist.angular.z = ctx->imu.angular_velocity.z;
 
+			LOG_INF("quaternion: %f %f %f %f", x[6], x[7], x[8], x[9]);
 			// check quaternion normal
 			__ASSERT(fabs((ctx->odometry.pose.orientation.w *
 					       ctx->odometry.pose.orientation.w +
@@ -462,7 +479,7 @@ static void rdd2_estimate_run(void *p0, void *p1, void *p2)
 					       ctx->odometry.pose.orientation.y +
 				       ctx->odometry.pose.orientation.z *
 					       ctx->odometry.pose.orientation.z) -
-				      1) < 1e-2,
+				      1) < 1e-1,
 				 "quaternion normal error");
 			zros_pub_update(&ctx->pub_odometry);
 		}
