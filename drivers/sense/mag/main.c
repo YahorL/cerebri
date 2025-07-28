@@ -80,7 +80,7 @@ static context_t g_ctx = {.work_item = Z_WORK_INITIALIZER(mag_work_handler),
 				  .L = 9
 			  },
 			  .ukf_initialized = false,
-			  .geomagnetic_reference = {-1575.5, 19999.6, 48095.4},  // Typical values in nT
+			  .geomagnetic_reference = {-1575.5, 19999.6, -48095.4},  // Typical values in nT
 			  .geomagnetic_magnitude = 52111.0};
 
 // Matrix helper functions
@@ -216,16 +216,23 @@ static double predict_measurement(double sigma_point[9], double B_k[3], double H
 	L_k[7] = -2.0 * B_k[0] * B_k[2];
 	L_k[8] = -2.0 * B_k[1] * B_k[2];
 	
-	// Compute L_k * θ'
-	double prediction = 0.0;
+	// Compute L_k * θ' (this predicts ||B_k||²)
+	double predicted_magnitude_squared = 0.0;
 	for (int i = 0; i < 3; i++) {
-		prediction += L_k[i] * c[i];
+		predicted_magnitude_squared += L_k[i] * c[i];
 	}
 	for (int i = 0; i < 6; i++) {
-		prediction += L_k[i + 3] * E[i];
+		predicted_magnitude_squared += L_k[i + 3] * E[i];
 	}
 	
-	return prediction;
+	// Compute ||H_k||² (geomagnetic reference magnitude squared)
+	double H_magnitude_squared = 0.0;
+	for (int i = 0; i < 3; i++) {
+		H_magnitude_squared += H_k[i] * H_k[i];
+	}
+	
+	// Return attitude-independent observation: ||B_k||² - ||H_k||²
+	return predicted_magnitude_squared - H_magnitude_squared;
 }
 
 static void convert_parameters(ukf_magnetometer_state_t *ukf, double b_out[3], double A_out[3][3])
@@ -406,6 +413,12 @@ void mag_work_handler(struct k_work *work)
 	for (int i = 0; i < 3; i++){
 		mag[i] = temp[i];
 	}
+
+	// Normalize mag
+	double mag_norm = sqrt(mag[0] * mag[0] + mag[1] * mag[1] + mag[2] * mag[2]);
+	mag[0] /= mag_norm;
+	mag[1] /= mag_norm;
+	mag[2] /= mag_norm;
 
 	// Log calibration parameters periodically
 	static int log_counter = 0;
