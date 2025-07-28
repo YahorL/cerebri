@@ -358,29 +358,29 @@ static void rdd2_estimate_run(void *p0, void *p1, void *p2)
 		["q", "mag", "mag_decl", "gyro", "accel", "dt"],
 		["q1"],
 		)*/
-		{
-			CASADI_FUNC_ARGS(attitude_estimator)
+		// {
+		// 	CASADI_FUNC_ARGS(attitude_estimator)
 
-			double a_b[3] = {ctx->imu.linear_acceleration.x,
-					 		 ctx->imu.linear_acceleration.y,
-					 		 ctx->imu.linear_acceleration.z};
-			double omega_b[3] = {ctx->imu.angular_velocity.x,
-					     		 ctx->imu.angular_velocity.y,
-					     		 ctx->imu.angular_velocity.z};
-			double mag[3] = {ctx->mag.magnetic_field.x, 
-							 ctx->mag.magnetic_field.y,
-					 		 ctx->mag.magnetic_field.z};
-			args[0] = q;
-			args[1] = mag;
-			args[2] = &decl_WL;
-			args[3] = omega_b;
-			args[4] = a_b;
-			args[5] = &dt;
+		// 	double a_b[3] = {ctx->imu.linear_acceleration.x,
+		// 			 		 ctx->imu.linear_acceleration.y,
+		// 			 		 ctx->imu.linear_acceleration.z};
+		// 	double omega_b[3] = {ctx->imu.angular_velocity.x,
+		// 			     		 ctx->imu.angular_velocity.y,
+		// 			     		 ctx->imu.angular_velocity.z};
+		// 	double mag[3] = {ctx->mag.magnetic_field.x, 
+		// 					 ctx->mag.magnetic_field.y,
+		// 			 		 ctx->mag.magnetic_field.z};
+		// 	args[0] = q;
+		// 	args[1] = mag;
+		// 	args[2] = &decl_WL;
+		// 	args[3] = omega_b;
+		// 	args[4] = a_b;
+		// 	args[5] = &dt;
 			
-			res[0] = q;
+		// 	res[0] = q;
 
-			CASADI_FUNC_CALL(attitude_estimator)
-		}
+		// 	CASADI_FUNC_CALL(attitude_estimator)
+		// }
 
 		// Put quaternion back into state vector
 		x[6] = q[0];
