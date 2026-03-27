@@ -44,7 +44,8 @@ struct context {
 	synapse_pb_Odometry odometry_ethernet;
 	synapse_pb_Imu imu;
 	synapse_pb_Odometry odometry;
-	struct zros_sub sub_odometry_ethernet, sub_imu, sub_mag;
+	synapse_pb_NavSatFix nav_sat_fix;
+	struct zros_sub sub_odometry_ethernet, sub_imu, sub_mag, sub_nav_sat_fix;
 	struct zros_pub pub_odometry;
 	double x[3];
 	struct k_sem running;
@@ -76,6 +77,7 @@ static struct context g_ctx = {
 	.sub_odometry_ethernet = {},
 	.sub_imu = {},
 	.sub_mag = {},
+	.sub_nav_sat_fix = {},
 	.pub_odometry = {},
 	.x = {},
 	.running = Z_SEM_INITIALIZER(g_ctx.running, 1, 1),
@@ -84,6 +86,7 @@ static struct context g_ctx = {
 	.thread_data = {},
 	.perf = {},
 	.mag = {},
+	.nav_sat_fix = {},
 };
 
 static void rdd2_estimate_init(struct context *ctx)
@@ -94,6 +97,7 @@ static void rdd2_estimate_init(struct context *ctx)
 	zros_sub_init(&ctx->sub_odometry_ethernet, &ctx->node, &topic_odometry_ethernet,
 		      &ctx->odometry_ethernet, 10);
 	zros_pub_init(&ctx->pub_odometry, &ctx->node, &topic_odometry_estimator, &ctx->odometry);
+	zros_sub_init(&ctx->sub_nav_sat_fix, &ctx->node, &topic_nav_sat_fix, &ctx->nav_sat_fix, 10);
 	perf_counter_init(&ctx->perf, "estimator imu", 1.0 / 100);
 	k_sem_take(&ctx->running, K_FOREVER);
 	LOG_INF("init");
@@ -104,6 +108,7 @@ static void rdd2_estimate_fini(struct context *ctx)
 	zros_sub_fini(&ctx->sub_imu);
 	zros_sub_fini(&ctx->sub_mag);
 	zros_sub_fini(&ctx->sub_odometry_ethernet);
+	zros_sub_fini(&ctx->sub_nav_sat_fix);
 	zros_pub_fini(&ctx->pub_odometry);
 	zros_node_fini(&ctx->node);
 	k_sem_give(&ctx->running);
@@ -142,6 +147,11 @@ static void rdd2_estimate_run(void *p0, void *p1, void *p2)
 	static const double g = 9.8;                          // gravity
 	static const double accel_gain = CONFIG_CEREBRI_RDD2_ATTITUDE_EST_ACCEL_GAIN * 1e-3;
 	static const double mag_gain = CONFIG_CEREBRI_RDD2_ATTITUDE_EST_MAG_GAIN * 1e-3;
+
+
+	// GPS Init
+	bool gps_initialized = false;
+	double gps0[3] = {0, 0, 0}; // GPS initial position
 
 	// ------ Initialize attitude from accelerometer and magnetometer ------
 
@@ -260,6 +270,19 @@ static void rdd2_estimate_run(void *p0, void *p1, void *p2)
 			zros_sub_update(&ctx->sub_mag);
 		}
 
+		if (zros_sub_update_available(&ctx->sub_nav_sat_fix)) {
+			zros_sub_update(&ctx->sub_nav_sat_fix);
+			if (!gps_initialized) {
+				gps0[0] = ctx->nav_sat_fix.latitude;
+				gps0[1] = ctx->nav_sat_fix.longitude;
+				gps0[2] = ctx->nav_sat_fix.altitude;
+				if (gps0[0] * gps0[0] + gps0[1] * gps0[1] + gps0[2] * gps0[2] > 1e-4) {
+					gps_initialized = true;
+					LOG_INF("GPS initialized: %f, %f, %f", gps0[0], gps0[1], gps0[2]);
+				}
+			}
+		}
+
 		/*
 		if (j % 100 == 0) {
 		    int offset = 0;
@@ -277,6 +300,8 @@ static void rdd2_estimate_run(void *p0, void *p1, void *p2)
 			// LOG_INF("correct offboard odometry");
 			zros_sub_update(&ctx->sub_odometry_ethernet);
 
+
+		
 #if defined(CONFIG_CEREBRI_RDD2_ESTIMATE_ODOMETRY_ETHERNET)
 			__ASSERT(fabs((ctx->odometry_ethernet.pose.orientation.w *
 					       ctx->odometry_ethernet.pose.orientation.w +
@@ -344,17 +369,26 @@ static void rdd2_estimate_run(void *p0, void *p1, void *p2)
 		q[2] = x[8];
 		q[3] = x[9];
 
+		double gps[3] = {0, 0, 0};
+
+		if(gps_initialized) {
+			gps[0] = ctx->nav_sat_fix.latitude;
+			gps[1] = ctx->nav_sat_fix.longitude;
+			gps[2] = ctx->nav_sat_fix.altitude;
+		} else {
+			gps[0] = 0;
+			gps[1] = 0;
+			gps[2] = 0;
+		}
+
 		{
 			CASADI_FUNC_ARGS(position_correction)
 
-			double gps[3] = {ctx->odometry_ethernet.pose.position.x,
-					 ctx->odometry_ethernet.pose.position.y,
-					 ctx->odometry_ethernet.pose.position.z};
-
 			args[0] = x;
-			args[1] = gps;
-			args[2] = &dt;
-			args[3] = P_pos;
+			args[1] = gps0;
+			args[2] = gps;
+			args[3] = &dt;
+			args[4] = P_pos;
 
 			res[0] = x;
 			res[1] = P_pos;
