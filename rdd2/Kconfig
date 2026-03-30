@@ -2,6 +2,16 @@ source "Kconfig.zephyr"
 
 menu "RDD2"
 
+config RDD2_CASADI
+	bool "Generate rdd2.c from local CasADi model at build time"
+	help
+	  When enabled, CMake invokes the cyecca venv Python to run
+	  src/casadi/rdd2.py and regenerate rdd2.c into the build tree.
+	  Requires modules/lib/cyecca/.venv to contain casadi, sympy,
+	  beartype, and numpy.
+	  This option is transitional and will be removed once the Rumoca
+	  generation flow is in place.
+
 rsource "subsys/Kconfig"
 rsource "drivers/Kconfig"
 

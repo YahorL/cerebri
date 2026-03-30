@@ -179,6 +179,45 @@ if(TARGET rdd2_flatbuffer_schema_codegen)
   add_dependencies(app rdd2_flatbuffer_schema_codegen)
 endif()
 
+# ---------------------------------------------------------------------------
+# CasADi rdd2.c generation (transitional — will be replaced by Rumoca)
+# ---------------------------------------------------------------------------
+if(CONFIG_RDD2_CASADI)
+  set(RDD2_CASADI_PY_DIR    ${CMAKE_CURRENT_SOURCE_DIR}/src/casadi)
+  set(RDD2_CASADI_DEST_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/src/generated)
+  set(RDD2_CASADI_C         ${RDD2_CASADI_DEST_DIR}/rdd2.c)
+  set(RDD2_CASADI_PYTHON    ${WORKSPACE_ROOT}/modules/lib/cyecca/.venv/bin/python3)
+
+  add_custom_command(
+    OUTPUT ${RDD2_CASADI_C}
+    COMMAND ${RDD2_CASADI_PYTHON}
+            ${RDD2_CASADI_PY_DIR}/rdd2.py
+            ${RDD2_CASADI_DEST_DIR}
+    DEPENDS
+      ${RDD2_CASADI_PY_DIR}/rdd2.py
+      ${RDD2_CASADI_PY_DIR}/symbolic.py
+      ${RDD2_CASADI_PY_DIR}/lie/__init__.py
+      ${RDD2_CASADI_PY_DIR}/lie/base.py
+      ${RDD2_CASADI_PY_DIR}/lie/direct_product.py
+      ${RDD2_CASADI_PY_DIR}/lie/group_rn.py
+      ${RDD2_CASADI_PY_DIR}/lie/group_so2.py
+      ${RDD2_CASADI_PY_DIR}/lie/group_so3.py
+      ${RDD2_CASADI_PY_DIR}/lie/group_se2.py
+      ${RDD2_CASADI_PY_DIR}/lie/group_se3.py
+      ${RDD2_CASADI_PY_DIR}/lie/group_se23.py
+    COMMENT "Generating rdd2.c from local CasADi model"
+    VERBATIM
+  )
+
+  add_custom_target(rdd2_casadi_codegen DEPENDS ${RDD2_CASADI_C})
+  add_dependencies(app rdd2_casadi_codegen)
+
+  set_source_files_properties(${RDD2_CASADI_C}
+    PROPERTIES COMPILE_OPTIONS
+    "-Wno-unused-parameter;-Wno-missing-prototypes;-Wno-missing-declarations;-Wno-float-equal"
+  )
+endif()
+
 target_include_directories(app PRIVATE
   include
   ${RDD2_FLATBUFFER_GENERATED_DIR}
